@@ -8,6 +8,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./nats": { "types": "./dist/nats.module.d.ts", "default": "./dist/nats.module.js" },
     "./tracing": {
       "types": "./dist/tracing.d.ts",
       "default": "./dist/tracing.js"

@@ -1,6 +1,6 @@
 {
   "name": "@mza1n/causality-context",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Causality context (correlation/causation/execution) propagation for HTTP, WebSocket, NATS and Redis pub/sub",
   "type": "module",
   "exports": {
@@ -8,7 +8,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./nats": { "types": "./dist/nats.module.d.ts", "default": "./dist/nats.module.js" },
+    "./nats": {
+      "types": "./dist/nats.module.d.ts",
+      "default": "./dist/nats.module.js"
+    },
     "./tracing": {
       "types": "./dist/tracing.d.ts",
       "default": "./dist/tracing.js"

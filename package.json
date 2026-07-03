@@ -1,6 +1,6 @@
 {
   "name": "@mza1n/causality-context",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Causality context (correlation/causation/execution) propagation for HTTP, WebSocket, NATS and Redis pub/sub",
   "type": "module",
   "exports": {
@@ -14,9 +14,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",

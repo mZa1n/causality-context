@@ -37,6 +37,6 @@ export function causalityHttpMiddleware() {
         for (const [k,v ] of Object.entries(contextToHttpHeaders(ctx))) {
             res.setHeader(k, v);
         }
-        runWithContext(ctx, () => next);
+        runWithContext(ctx, () => next());
     };
 }

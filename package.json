@@ -1,0 +1,43 @@
+{
+  "name": "@mza1n/causality-context",
+  "version": "0.1.0",
+  "description": "Causality context (correlation/causation/execution) propagation for HTTP, WebSocket, NATS and Redis pub/sub",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mZa1n/causality-context.git"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11",
+    "express": "^5",
+    "nats": "^2"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/common": { "optional": true },
+    "express": { "optional": true },
+    "nats": { "optional": true }
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "express": "^5.0.0",
+    "nats": "^2.29.0",
+    "typescript": "^5.6.0"
+  }
+}

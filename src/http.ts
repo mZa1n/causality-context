@@ -1,10 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createRootContext, runWithContext, type CausalityContext } from "./context.js";
+import {createRootContext, type FlowContext, enterContext} from "./context.js";
 
-export const CAUSALITY_HEADERS = {
-    correlationId: 'x-correlation-id',
-    causationId: 'x-causation-id',
-    executionId: 'x-execution-id',
+export const FLOW_HEADERS = {
+    flow: 'x-flow-id',
+    step: 'x-step-id',
+    parentStep: 'x-parent-step-id',
 } as const;
 
 function header(req: Request, name: string): string | undefined {
@@ -13,30 +13,32 @@ function header(req: Request, name: string): string | undefined {
     return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-export function contextFromHttpHeaders(req: Request): CausalityContext {
+export function contextFromHttpHeaders(req: Request): FlowContext {
     return createRootContext({
-        correlationId: header(req, CAUSALITY_HEADERS.correlationId),
-        causationId:
-            header(req, CAUSALITY_HEADERS.executionId) ??
-            header(req, CAUSALITY_HEADERS.causationId),
+        flowId: header(req, FLOW_HEADERS.flow),
+        parentStepId:
+            header(req, FLOW_HEADERS.step) ??
+            header(req, FLOW_HEADERS.parentStep),
     });
 }
 
-export function contextToHttpHeaders(ctx: CausalityContext): Record<string, string> {
+export function contextToHttpHeaders(ctx: FlowContext): Record<string, string> {
     const out: Record<string, string> = {
-        [CAUSALITY_HEADERS.correlationId]: ctx.correlationId,
-        [CAUSALITY_HEADERS.executionId]: ctx.executionId,
+        [FLOW_HEADERS.flow]: ctx.flowId,
+        [FLOW_HEADERS.step]: ctx.stepId,
     };
-    if (ctx.causationId) out[CAUSALITY_HEADERS.causationId] = ctx.causationId;
+    if (ctx.parentStepId) out[FLOW_HEADERS.parentStep] = ctx.parentStepId;
     return out;
 }
 
 export function causalityHttpMiddleware() {
     return (req: Request, res: Response, next: NextFunction): void => {
         const ctx = contextFromHttpHeaders(req);
-        for (const [k,v ] of Object.entries(contextToHttpHeaders(ctx))) {
+        for (const [k, v] of Object.entries(contextToHttpHeaders(ctx))) {
             res.setHeader(k, v);
         }
-        runWithContext(ctx, () => next());
+        enterContext(ctx, () => {
+            next();
+        });
     };
 }

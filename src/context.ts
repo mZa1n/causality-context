@@ -1,49 +1,53 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import { newCorrelationId, newExecutionId } from "./ids.js";
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { newId } from './ids.js';
 
-export type CausalityContext = {
-    correlationId: string;
-    causationId?: string;
-    executionId: string;
-}
+export type FlowContext = {
+    flowId: string;
+    stepId: string;
+    parentStepId?: string;
+};
 
-const als = new AsyncLocalStorage<CausalityContext>();
+const als = new AsyncLocalStorage<FlowContext>();
 
-export function createRootContext(
-    input?: Partial<CausalityContext>,
-): CausalityContext {
+export function createRootContext(input?: Partial<FlowContext>): FlowContext {
+    const id = newId();
     return {
-        correlationId: input?.correlationId ?? newCorrelationId(),
-        causationId: input?.causationId,
-        executionId: newExecutionId(),
+        flowId: input?.flowId ?? id,
+        stepId: id,
+        parentStepId: input?.parentStepId,
     };
 }
 
-export function createChildContext(parent: CausalityContext): CausalityContext {
+export function createChildContext(parent: FlowContext): FlowContext {
     return {
-        correlationId: parent.correlationId,
-        causationId: parent.executionId,
-        executionId: newExecutionId(),
-    }
+        flowId: parent.flowId,
+        stepId: newId(),
+        parentStepId: parent.stepId,
+    };
 }
 
-export function adoptContext(incoming: Partial<CausalityContext>): CausalityContext {
+export function adoptContext(incoming: Partial<FlowContext>): FlowContext {
+    const id = newId();
     return {
-        correlationId: incoming.correlationId ?? newCorrelationId(),
-        causationId: incoming.causationId,
-        executionId: incoming.executionId ?? newExecutionId(),
-    }
+        flowId: incoming.flowId ?? id,
+        stepId: incoming.stepId ?? id,
+        parentStepId: incoming.parentStepId,
+    };
 }
 
-export function runWithContext<T>(ctx: CausalityContext, fn: () => T): T {
+export function forkContext(): FlowContext {
+    const cur = als.getStore();
+    return cur ? createChildContext(cur) : createRootContext();
+}
+
+export function runWithContext<T>(ctx: FlowContext, fn: () => T): T {
     return als.run(ctx, fn);
 }
 
-export function getCurrentContext(): CausalityContext | undefined {
-    return als.getStore();
+export function enterContext(ctx: FlowContext, fn: () => void): void {
+    als.run(ctx, fn);
 }
 
-export function forkContext(): CausalityContext {
-    const cur = als.getStore();
-    return cur ? createChildContext(cur) : createRootContext();
+export function getCurrentContext(): FlowContext | undefined {
+    return als.getStore();
 }

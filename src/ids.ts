@@ -1,9 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { uuidv7 } from 'uuidv7';
 
-export function newCorrelationId(): string {
-    return `corr_${randomUUID()}`;
-}
-
-export function newExecutionId(): string {
-    return `exec_${randomUUID()}`;
+export function newId(): string {
+    return uuidv7();
 }

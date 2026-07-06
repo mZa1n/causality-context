@@ -1,7 +1,6 @@
 import type { LoggerService } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
-import { getCurrentContext } from './context.js';
 
 type Level = 'log' | 'error' | 'warn' | 'debug' | 'verbose';
 
@@ -24,22 +23,11 @@ const SEVERITY: Record<Level, SeverityNumber> = {
 const PRETTY =
     process.env.LOG_PRETTY === '1' || process.env.NODE_ENV !== 'production';
 
-export function withContextFields<T extends Record<string, unknown>>(
-    fields: T,
-) {
-    const ctx = getCurrentContext();
+function traceFields(): Record<string, string> {
     const span = trace.getActiveSpan();
-    const tf = span
-        ? { trace_id: span.spanContext().traceId, span_id: span.spanContext().spanId }
-        : {};
-    if (!ctx) return { ...fields, ...tf };
-    return {
-        ...fields,
-        flow_id: ctx.flowId,
-        step_id: ctx.stepId,
-        ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
-        ...tf,
-    };
+    if (!span) return {};
+    const c = span.spanContext();
+    return { trace_id: c.traceId, span_id: c.spanId };
 }
 
 export class CausalityLogger implements LoggerService {
@@ -52,43 +40,39 @@ export class CausalityLogger implements LoggerService {
         message: unknown,
         meta?: Record<string, unknown>,
     ) {
-        const msg = typeof message === 'string' ? message : String(message);
+        const event = typeof message === 'string' ? message : String(message);
         const context = (meta?.context as string) ?? undefined;
-        const loggerName = context ? `${this.service}.${context}` : this.service;
-        const ctx = getCurrentContext();
-        const extra = meta ? stripContext(meta) : {};
+        const logger = context ? `${this.service}.${context}` : this.service;
+        const exception = (meta?.exception as string) ?? undefined;
+        const extra = meta ? strip(meta) : {};
+        const tf = traceFields();
+
+        const record: Record<string, unknown> = {
+            event,
+            level: LEVEL_TEXT[level],
+            ...tf,
+            logger,
+            timestamp: new Date().toISOString().replace('Z', '000Z'),
+            ...(exception ? { exception } : {}),
+            ...extra,
+        };
 
         this.otel.emit({
             severityNumber: SEVERITY[level],
             severityText: LEVEL_TEXT[level],
-            body: msg,
+            body: event,
             attributes: {
-                event: msg,
-                logger: loggerName,
+                event,
                 level: LEVEL_TEXT[level],
-                ...(ctx
-                    ? {
-                        flow_id: ctx.flowId,
-                        step_id: ctx.stepId,
-                        ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
-                    }
-                    : {}),
+                logger,
+                ...(exception ? { exception } : {}),
                 ...extra,
             },
         });
+
         if (PRETTY) {
-            const ids = ctx ? `flow=${ctx.flowId.slice(0, 8)}` : '';
-            process.stdout.write(
-                `${LEVEL_TEXT[level].toUpperCase()} [${loggerName}] ${msg} ${ids}\n`,
-            );
+            process.stdout.write(`${LEVEL_TEXT[level].toUpperCase()} [${logger}] ${event}\n`);
         } else {
-            const record = {
-                event: msg,
-                level: LEVEL_TEXT[level],
-                logger: loggerName,
-                timestamp: new Date().toISOString().replace('Z', '000Z'),
-                ...withContextFields(extra),
-            };
             const out = JSON.stringify(record);
             if (level === 'error') process.stderr.write(out + '\n');
             else process.stdout.write(out + '\n');
@@ -99,7 +83,7 @@ export class CausalityLogger implements LoggerService {
         this.write('log', m, metaOf(r));
     }
     error(m: unknown, ...r: unknown[]) {
-        this.write('error', m, metaOf(r));
+        this.write('error', m, metaOf(r, true));
     }
     warn(m: unknown, ...r: unknown[]) {
         this.write('warn', m, metaOf(r));
@@ -112,12 +96,17 @@ export class CausalityLogger implements LoggerService {
     }
 }
 
-function metaOf(rest: unknown[]): Record<string, unknown> {
-    const context = rest.find((r) => typeof r === 'string') as string | undefined;
-    return context ? { context } : {};
+function metaOf(rest: unknown[], withException = false): Record<string, unknown> {
+    const strings = rest.filter((r) => typeof r === 'string') as string[];
+    const context = strings.find((s) => !s.includes('\n'));
+    const stack = withException ? strings.find((s) => s.includes('\n')) : undefined;
+    return {
+        ...(context ? { context } : {}),
+        ...(stack ? { exception: stack } : {}),
+    };
 }
 
-function stripContext(meta: Record<string, unknown>) {
-    const { context, ...rest } = meta;
+function strip(meta: Record<string, unknown>) {
+    const { context, exception, ...rest } = meta;
     return rest;
 }

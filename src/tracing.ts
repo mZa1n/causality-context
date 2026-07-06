@@ -26,17 +26,6 @@ const sdk = new NodeSDK({
     ],
 });
 sdk.start();
-
-const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [
-        new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
-    ],
-});
-logs.setGlobalLoggerProvider(loggerProvider);
-
 process.on('SIGTERM', () => {
-    Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
-        process.exit(0),
-    );
+    sdk.shutdown().finally(() => process.exit(0));
 });

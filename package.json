@@ -36,8 +36,8 @@
     "url": "git+https://github.com/mZa1n/causality-context.git"
   },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.9.0",
     "@nestjs/common": "^11",
+    "@opentelemetry/api": "^1.9.0",
     "express": "^5",
     "nats": "^2"
   },
@@ -61,12 +61,13 @@
     "typescript": "^5.6.0"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.78.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
     "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-node": "^0.220.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@prisma/instrumentation": "^7.8.0",
     "uuidv7": "^1.2.1"
   }
 }

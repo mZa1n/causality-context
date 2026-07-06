@@ -3,6 +3,7 @@ import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { PrismaInstrumentation } from "@prisma/instrumentation";
 
 export interface InitTracingOptions {
     serviceName?: string;
@@ -22,7 +23,9 @@ export function initTracing(opts: InitTracingOptions = {}): NodeSDK {
         instrumentations: [getNodeAutoInstrumentations({
             '@opentelemetry/instrumentation-fs': { enabled: false },
             '@opentelemetry/instrumentation-dns': { enabled: false },
-        })],
+        }),
+            new PrismaInstrumentation(),
+        ],
     });
     sdk.start();
     process.on('SIGTERM', () => {

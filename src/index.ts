@@ -24,4 +24,4 @@ export {
     type WithMeta,
 } from './redis.js';
 
-export { CausalityLogger, withContextFields } from './logger.js';
+export { CausalityLogger } from './logger.js';

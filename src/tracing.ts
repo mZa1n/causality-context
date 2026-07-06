@@ -21,6 +21,9 @@ const sdk = new NodeSDK({
         getNodeAutoInstrumentations({
             '@opentelemetry/instrumentation-fs': { enabled: false },
             '@opentelemetry/instrumentation-dns': { enabled: false },
+            '@opentelemetry/instrumentation-express': { enabled: false },  // ← шелуха middleware
+            '@opentelemetry/instrumentation-router': { enabled: false },   // ← router.patched спам
+            '@opentelemetry/instrumentation-net': { enabled: false },
         }),
         new PrismaInstrumentation(),
     ],

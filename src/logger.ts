@@ -1,7 +1,7 @@
 import type { LoggerService } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
-import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { getCurrentContext } from './context.js';
+import { LogTransport } from './otlp-logs.js';
 
 type Level = 'log' | 'error' | 'warn' | 'debug' | 'verbose';
 
@@ -13,15 +13,7 @@ const LEVEL_TEXT: Record<Level, string> = {
     verbose: 'debug',
 };
 
-const SEVERITY: Record<Level, SeverityNumber> = {
-    log: SeverityNumber.INFO,
-    error: SeverityNumber.ERROR,
-    warn: SeverityNumber.WARN,
-    debug: SeverityNumber.DEBUG,
-    verbose: SeverityNumber.TRACE,
-};
-
-const otelLogger = logs.getLogger('causality');
+const transport = new LogTransport();
 
 function traceFields(): Record<string, string> {
     const span = trace.getActiveSpan();
@@ -54,42 +46,28 @@ export class CausalityLogger implements LoggerService {
         const extra = meta ? strip(meta) : {};
         const ctx = getCurrentContext();
 
-        const flowAttrs = ctx
-            ? {
-                flow_id: ctx.flowId,
-                step_id: ctx.stepId,
-                ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
-            }
-            : {};
-
-        // OTLP → /v1/logs. trace_id/span_id SDK берёт из активного спана сам.
-        otelLogger.emit({
-            severityNumber: SEVERITY[level],
-            severityText: LEVEL_TEXT[level],
-            body: event,
-            attributes: {
-                event,
-                logger,
-                ...flowAttrs,
-                ...(exception ? { exception } : {}),
-                ...extra,
-            },
-        });
-
-        // stdout fallback (docker logs)
         const record: Record<string, unknown> = {
+            ...extra,
             event,
             level: LEVEL_TEXT[level],
             ...traceFields(),
-            ...flowAttrs,
+            ...(ctx
+                ? {
+                    flow_id: ctx.flowId,
+                    step_id: ctx.stepId,
+                    ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
+                }
+                : {}),
             logger,
             timestamp: new Date().toISOString().replace('Z', '000Z'),
             ...(exception ? { exception } : {}),
-            ...extra,
         };
-        const out = JSON.stringify(record);
-        if (level === 'error') process.stderr.write(out + '\n');
-        else process.stdout.write(out + '\n');
+
+        const line = JSON.stringify(record);
+        transport.enqueue(line);
+
+        if (level === 'error') process.stderr.write(line + '\n');
+        else process.stdout.write(line + '\n');
     }
 
     log(m: unknown, ...r: unknown[]) { this.write('log', m, metaOf(r)); }

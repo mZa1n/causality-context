@@ -3,12 +3,6 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
-import {
-    LoggerProvider,
-    BatchLogRecordProcessor,
-} from '@opentelemetry/sdk-logs';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
-import { logs } from '@opentelemetry/api-logs';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 
 const serviceName = process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
@@ -29,15 +23,6 @@ const sdk = new NodeSDK({
     ],
 });
 sdk.start();
-
-const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
-});
-logs.setGlobalLoggerProvider(loggerProvider);
-
 process.on('SIGTERM', () => {
-    Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
-        process.exit(0),
-    );
+    sdk.shutdown().finally(() => process.exit(0));
 });

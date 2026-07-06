@@ -4,6 +4,7 @@ import {
     Module,
     OnModuleInit,
     OnModuleDestroy,
+    Global,
 } from '@nestjs/common';
 import {
     connect,
@@ -280,6 +281,7 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
     }
 }
 
+@Global()
 @Module({
     providers: [NatsService],
     exports: [NatsService],

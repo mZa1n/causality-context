@@ -21,14 +21,23 @@ const sdk = new NodeSDK({
         getNodeAutoInstrumentations({
             '@opentelemetry/instrumentation-fs': { enabled: false },
             '@opentelemetry/instrumentation-dns': { enabled: false },
-            '@opentelemetry/instrumentation-express': { enabled: false },  // ← шелуха middleware
-            '@opentelemetry/instrumentation-router': { enabled: false },   // ← router.patched спам
+            '@opentelemetry/instrumentation-express': { enabled: false },
+            '@opentelemetry/instrumentation-router': { enabled: false },
             '@opentelemetry/instrumentation-net': { enabled: false },
         }),
         new PrismaInstrumentation(),
     ],
 });
 sdk.start();
+
+const loggerProvider = new LoggerProvider({
+    resource,
+    processors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
+});
+logs.setGlobalLoggerProvider(loggerProvider);
+
 process.on('SIGTERM', () => {
-    sdk.shutdown().finally(() => process.exit(0));
+    Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
+        process.exit(0),
+    );
 });

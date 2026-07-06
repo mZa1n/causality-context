@@ -1,3 +1,1 @@
-import { initTracing } from './tracing.js';
-
-initTracing();
+import './tracing.js';

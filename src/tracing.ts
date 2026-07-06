@@ -1,35 +1,42 @@
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
-import { PrismaInstrumentation } from "@prisma/instrumentation";
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
+import {
+    LoggerProvider,
+    BatchLogRecordProcessor,
+} from '@opentelemetry/sdk-logs';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { logs } from '@opentelemetry/api-logs';
+import { PrismaInstrumentation } from '@prisma/instrumentation';
 
-export interface InitTracingOptions {
-    serviceName?: string;
-    endpoint?: string;
-}
+const serviceName = process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
+const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName });
 
-export function initTracing(opts: InitTracingOptions = {}): NodeSDK {
-    const serviceName = opts.serviceName ?? process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
-    const endpoint = opts.endpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318';
-    const sdk = new NodeSDK({
-        resource: resourceFromAttributes({
-            [ATTR_SERVICE_NAME]: serviceName,
-        }),
-        traceExporter: new OTLPTraceExporter({
-            url: `${endpoint}/v1/traces`,
-        }),
-        instrumentations: [getNodeAutoInstrumentations({
+const sdk = new NodeSDK({
+    resource,
+    traceExporter: new OTLPTraceExporter(),
+    instrumentations: [
+        getNodeAutoInstrumentations({
             '@opentelemetry/instrumentation-fs': { enabled: false },
             '@opentelemetry/instrumentation-dns': { enabled: false },
         }),
-            new PrismaInstrumentation(),
-        ],
-    });
-    sdk.start();
-    process.on('SIGTERM', () => {
-        sdk.shutdown().finally(() => process.exit(0));
-    });
-    return sdk;
-}
+        new PrismaInstrumentation(),
+    ],
+});
+sdk.start();
+
+const loggerProvider = new LoggerProvider({
+    resource,
+    processors: [
+        new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
+    ],
+});
+logs.setGlobalLoggerProvider(loggerProvider);
+
+process.on('SIGTERM', () => {
+    Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
+        process.exit(0),
+    );
+});

@@ -1,47 +1,37 @@
 import type { LoggerService } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
+import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { getCurrentContext } from './context.js';
 
 type Level = 'log' | 'error' | 'warn' | 'debug' | 'verbose';
 
+const LEVEL_TEXT: Record<Level, string> = {
+    log: 'info',
+    error: 'error',
+    warn: 'warning',
+    debug: 'debug',
+    verbose: 'debug',
+};
+
+const SEVERITY: Record<Level, SeverityNumber> = {
+    log: SeverityNumber.INFO,
+    error: SeverityNumber.ERROR,
+    warn: SeverityNumber.WARN,
+    debug: SeverityNumber.DEBUG,
+    verbose: SeverityNumber.TRACE,
+};
+
 const PRETTY =
     process.env.LOG_PRETTY === '1' || process.env.NODE_ENV !== 'production';
 
-const c = {
-    gray: (s: string) => `\x1b[90m${s}\x1b[0m`,
-    green: (s: string) => `\x1b[32m${s}\x1b[0m`,
-    yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
-    red: (s: string) => `\x1b[31m${s}\x1b[0m`,
-    cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
-    dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-};
-
-const levelColor: Record<Level, (s: string) => string> = {
-    log: c.green,
-    error: c.red,
-    warn: c.yellow,
-    debug: c.cyan,
-    verbose: c.gray,
-};
-
-function traceFields(): { trace_id?: string; span_id?: string } {
-    const span = trace.getActiveSpan();
-    if (!span) return {};
-    const ctx = span.spanContext();
-    return { trace_id: ctx.traceId, span_id: ctx.spanId };
-}
-
 export function withContextFields<T extends Record<string, unknown>>(
     fields: T,
-): T & {
-    flow_id?: string;
-    step_id?: string;
-    parent_step_id?: string;
-    trace_id?: string;
-    span_id?: string;
-} {
+) {
     const ctx = getCurrentContext();
-    const tf = traceFields();
+    const span = trace.getActiveSpan();
+    const tf = span
+        ? { trace_id: span.spanContext().traceId, span_id: span.spanContext().spanId }
+        : {};
     if (!ctx) return { ...fields, ...tf };
     return {
         ...fields,
@@ -52,16 +42,9 @@ export function withContextFields<T extends Record<string, unknown>>(
     };
 }
 
-function short(id: string): string {
-    return id.slice(0, 8);
-}
-
-function metaOf(rest: unknown[]): Record<string, unknown> {
-    const context = rest.find((r) => typeof r === 'string') as string | undefined;
-    return context ? { context } : {};
-}
-
 export class CausalityLogger implements LoggerService {
+    private readonly otel = logs.getLogger('causality');
+
     constructor(private readonly service: string) {}
 
     private write(
@@ -69,38 +52,47 @@ export class CausalityLogger implements LoggerService {
         message: unknown,
         meta?: Record<string, unknown>,
     ) {
-        const ctx = getCurrentContext();
         const msg = typeof message === 'string' ? message : String(message);
-        const context = (meta?.context as string) ?? '';
+        const context = (meta?.context as string) ?? undefined;
+        const loggerName = context ? `${this.service}.${context}` : this.service;
+        const ctx = getCurrentContext();
+        const extra = meta ? stripContext(meta) : {};
 
-        if (PRETTY) {
-            const time = c.dim(new Date().toLocaleTimeString());
-            const lvl = levelColor[level](level.toUpperCase().padEnd(5));
-            const ctxTag = context ? c.yellow(`[${context}]`) : '';
-            const ids = ctx
-                ? c.gray(
-                    `flow=${short(ctx.flowId)} step=${short(ctx.stepId)}` +
-                    (ctx.parentStepId ? ` parent=${short(ctx.parentStepId)}` : ''),
-                )
-                : '';
-            const line = `${time} ${lvl} ${ctxTag} ${msg} ${ids}`
-                .replace(/\s+/g, ' ')
-                .trim();
-            if (level === 'error') process.stderr.write(line + '\n');
-            else process.stdout.write(line + '\n');
-            return;
-        }
-
-        const base = withContextFields({
-            timestamp: new Date().toISOString(),
-            level,
-            service: this.service,
-            message: msg,
-            ...(meta ?? {}),
+        this.otel.emit({
+            severityNumber: SEVERITY[level],
+            severityText: LEVEL_TEXT[level],
+            body: msg,
+            attributes: {
+                event: msg,
+                logger: loggerName,
+                level: LEVEL_TEXT[level],
+                ...(ctx
+                    ? {
+                        flow_id: ctx.flowId,
+                        step_id: ctx.stepId,
+                        ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
+                    }
+                    : {}),
+                ...extra,
+            },
         });
-        const out = JSON.stringify(base);
-        if (level === 'error') process.stderr.write(out + '\n');
-        else process.stdout.write(out + '\n');
+        if (PRETTY) {
+            const ids = ctx ? `flow=${ctx.flowId.slice(0, 8)}` : '';
+            process.stdout.write(
+                `${LEVEL_TEXT[level].toUpperCase()} [${loggerName}] ${msg} ${ids}\n`,
+            );
+        } else {
+            const record = {
+                event: msg,
+                level: LEVEL_TEXT[level],
+                logger: loggerName,
+                timestamp: new Date().toISOString().replace('Z', '000Z'),
+                ...withContextFields(extra),
+            };
+            const out = JSON.stringify(record);
+            if (level === 'error') process.stderr.write(out + '\n');
+            else process.stdout.write(out + '\n');
+        }
     }
 
     log(m: unknown, ...r: unknown[]) {
@@ -118,4 +110,14 @@ export class CausalityLogger implements LoggerService {
     verbose(m: unknown, ...r: unknown[]) {
         this.write('verbose', m, metaOf(r));
     }
+}
+
+function metaOf(rest: unknown[]): Record<string, unknown> {
+    const context = rest.find((r) => typeof r === 'string') as string | undefined;
+    return context ? { context } : {};
+}
+
+function stripContext(meta: Record<string, unknown>) {
+    const { context, ...rest } = meta;
+    return rest;
 }

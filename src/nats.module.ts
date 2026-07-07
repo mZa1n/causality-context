@@ -60,11 +60,18 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
                 maxReconnectAttempts: -1,
                 reconnectTimeWait: 2000,
             });
-            this.logger.log(`NATS connected: ${servers}`);
+            this.logger.log(
+                { servers, event: 'Broker connection established' },
+                'core.broker.middlewares.logger',
+            );
             this.monitorConnection();
             this.attachAll();
         } catch (e) {
-            this.logger.error(`NATS connect failed (${servers})`, e as Error);
+            this.logger.error(
+                { servers, event: 'Broker connection failed' },
+                e instanceof Error ? e.stack : String(e),
+                'core.broker.middlewares.logger',
+            );
             setTimeout(() => void this.initConnection(), 5000);
         }
     }
@@ -73,7 +80,10 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
         if (!this.nc) return;
         (async () => {
             for await (const s of this.nc!.status()) {
-                this.logger.log(`NATS status: ${s.type}`);
+                this.logger.log(
+                    { status: s.type, event: 'Broker connection status changed' },
+                    'core.broker.middlewares.logger',
+                );
             }
         })().catch(() => {
         });
@@ -127,13 +137,20 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
             async (span) => {
                 this.injectTrace(h);
                 await runWithContext(flowCtx, async () =>
-                    this.logger.log(`→ request ${subject}`, NatsService.name),
+                    this.logger.log(
+                        { subject, event: 'Broker message publishing started' },
+                        'core.broker.middlewares.logger',
+                    ),
                 );
                 try {
                     const msg = await this.nc!.request(
                         subject,
                         this.sc.encode(JSON.stringify(data ?? {})),
                         {timeout: timeoutMs, headers: h},
+                    );
+                    this.logger.log(
+                        { event: 'Broker message publishing finished' },
+                        'core.broker.middlewares.logger',
                     );
                     const text = this.sc.decode(msg.data);
                     return (text ? JSON.parse(text) : undefined) as T;
@@ -178,18 +195,26 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
                         },
                         (span) =>
                             runWithContext(flowCtx, async () => {
-                                this.logger.log(`← handle ${subject}`, NatsService.name);
+                                this.logger.log(
+                                    { subject, event: 'Broker message processing started' },
+                                    'core.broker.middlewares.logger',
+                                );
                                 try {
                                     const text = this.sc.decode(m.data);
                                     const payload = text ? JSON.parse(text) : undefined;
                                     const result = await handler(payload);
                                     m.respond(this.sc.encode(JSON.stringify(result ?? null)));
+                                    this.logger.log(
+                                        { event: 'Broker message processing finished' },
+                                        'core.broker.middlewares.logger',
+                                    );
                                 } catch (e) {
                                     span.recordException(e as Error);
                                     span.setStatus({code: SpanStatusCode.ERROR});
                                     this.logger.error(
-                                        `reply handler error on ${subject}`,
-                                        e as Error,
+                                        { subject, event: 'Broker message processing failed' },
+                                        e instanceof Error ? e.stack : String(e),
+                                        'core.broker.middlewares.logger',
                                     );
                                     const eh = natsHeaders();
                                     eh.set('x-error', '1');
@@ -204,19 +229,40 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
                     ),
                 );
             }
-        })().catch((e) => this.logger.error(`reply loop ${subject}`, e));
+        })().catch((e) =>
+            this.logger.error(
+                { subject, event: 'Broker reply loop failed' },
+                e instanceof Error ? e.stack : String(e),
+                'core.broker.middlewares.logger',
+            ),
+        );
     }
 
     publish(subject: string, data: unknown) {
         if (!this.nc) {
-            this.logger.warn(`publish dropped (no NATS): ${subject}`);
+            this.logger.warn(
+                { subject, event: 'Broker message publishing dropped' },
+                'core.broker.middlewares.logger',
+            );
             return;
         }
         const flowCtx = forkContext();
         const h = contextToNatsHeaders(flowCtx);
         if (TRACE_EVENTS) this.injectTrace(h);
-        this.nc.publish(subject, this.sc.encode(JSON.stringify(data ?? {})), {
-            headers: h,
+        runWithContext(flowCtx, () => {
+            this.logger.log(
+                { subject, event: 'Broker message publishing started' },
+                'core.broker.middlewares.logger',
+            );
+
+            this.nc!.publish(subject, this.sc.encode(JSON.stringify(data ?? {})), {
+                headers: h,
+            });
+
+            this.logger.log(
+                { event: 'Broker message publishing finished' },
+                'core.broker.middlewares.logger',
+            );
         });
     }
 
@@ -231,6 +277,10 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
         this.subs.push(sub);
         (async () => {
             for await (const m of sub) {
+                this.logger.log(
+                    { subject: m.subject, event: 'Broker event processing started' },
+                    'core.broker.middlewares.logger',
+                );
                 const flowCtx = contextFromNatsHeaders(m.headers);
                 let payload: unknown;
                 try {
@@ -242,11 +292,16 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
                 const run = () =>
                     runWithContext(flowCtx, () => {
                         try {
+                            this.logger.log(
+                                { event: 'Broker event processing finished' },
+                                'core.broker.middlewares.logger',
+                            );
                             handler(payload, m.subject);
                         } catch (e) {
                             this.logger.error(
-                                `event handler error on ${m.subject}`,
-                                e as Error,
+                                { subject: m.subject, event: 'Broker event processing failed' },
+                                e instanceof Error ? e.stack : String(e),
+                                'core.broker.middlewares.logger',
                             );
                         }
                     });
@@ -270,7 +325,13 @@ export class NatsService implements OnModuleInit, OnModuleDestroy {
                     run();
                 }
             }
-        })().catch((e) => this.logger.error(`event loop ${subject}`, e));
+        })().catch((e) =>
+            this.logger.error(
+                { subject, event: 'Broker event loop failed' },
+                e instanceof Error ? e.stack : String(e),
+                'core.broker.middlewares.logger',
+            ),
+        );
     }
 
     async onModuleDestroy() {

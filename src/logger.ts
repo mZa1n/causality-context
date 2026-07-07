@@ -47,53 +47,42 @@ export class CausalityLogger implements LoggerService {
     constructor(private readonly service: string) {}
 
     private write(level: Level, message: unknown, meta?: Record<string, unknown>) {
-        const event = typeof message === 'string' ? message : String(message);
         const context = (meta?.context as string) ?? undefined;
         const logger = context ? `${this.service}.${context}` : this.service;
         const exception = (meta?.exception as string) ?? undefined;
         const extra = meta ? strip(meta) : {};
         const ctx = getCurrentContext();
-        const attributes: LogAttributes = {
+
+        const payload =
+            message &&
+            typeof message === 'object' &&
+            !Array.isArray(message)
+                ? (message as Record<string, unknown>)
+                : { event: String(message) };
+
+        const event = String(payload.event ?? 'log');
+
+        const record: Record<string, unknown> = {
+            ...payload,
             event,
             level: LEVEL_TEXT[level],
+            ...traceFields(),
             logger,
-            ...(ctx
-                ? {
-                    flow_id: ctx.flowId,
-                    step_id: ctx.stepId,
-                    ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
-                }
-                : {}),
+            timestamp: new Date().toISOString().replace('Z', '000Z'),
             ...(exception ? { exception } : {}),
-            ...(extra as LogAttributes),
         };
 
         otelLogger.emit({
             severityNumber: SEVERITY[level],
             severityText: LEVEL_TEXT[level],
-            body: event,
-            attributes,
+            body: JSON.stringify(record),
+            attributes: {
+                event,
+                level: LEVEL_TEXT[level],
+                logger,
+                ...(exception ? { exception } : {}),
+            },
         });
-
-        const record: Record<string, unknown> = {
-            ...extra,
-            event,
-            level: LEVEL_TEXT[level],
-            ...traceFields(),
-            ...(ctx
-                ? {
-                    flow_id: ctx.flowId,
-                    step_id: ctx.stepId,
-                    ...(ctx.parentStepId ? { parent_step_id: ctx.parentStepId } : {}),
-                }
-                : {}),
-            logger,
-            timestamp: new Date().toISOString().replace('Z', '000Z'),
-            ...(exception ? { exception } : {}),
-        };
-        const out = JSON.stringify(record);
-        if (level === 'error') process.stderr.write(out + '\n');
-        else process.stdout.write(out + '\n');
     }
 
     log(m: unknown, ...r: unknown[]) { this.write('log', m, metaOf(r)); }

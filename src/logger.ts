@@ -25,8 +25,6 @@ const SEVERITY: Record<Level, SeverityNumber> = {
   verbose: SeverityNumber.TRACE,
 };
 
-const otelLogger = logs.getLogger('causality');
-
 function traceFields(): Record<string, string> {
   const span = trace.getActiveSpan();
   if (!span) return {};
@@ -58,9 +56,6 @@ export class CausalityLogger implements LoggerService {
     const context = (meta?.context as string) ?? undefined;
     const logger = context ? `${this.service}.${context}` : this.service;
     const exception = (meta?.exception as string) ?? undefined;
-    const extra = meta ? strip(meta) : {};
-    const ctx = getCurrentContext();
-
     const payload =
       message && typeof message === 'object' && !Array.isArray(message)
         ? (message as Record<string, unknown>)
@@ -70,15 +65,13 @@ export class CausalityLogger implements LoggerService {
 
     const record: Record<string, unknown> = {
       ...payload,
-      event,
       level: LEVEL_TEXT[level],
       ...traceFields(),
-      logger,
       timestamp: new Date().toISOString().replace('Z', '000Z'),
       ...(exception ? { exception } : {}),
     };
 
-    otelLogger.emit({
+    logs.getLogger(logger).emit({
       severityNumber: SEVERITY[level],
       severityText: LEVEL_TEXT[level],
       body: event,

@@ -17,6 +17,7 @@ const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName });
 
 const sdk = new NodeSDK({
   resource,
+  autoDetectResources: false,
   traceExporter: new OTLPTraceExporter(),
   instrumentations: [
     getNodeAutoInstrumentations({

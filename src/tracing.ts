@@ -23,12 +23,7 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-fs': { enabled: false },
       '@opentelemetry/instrumentation-dns': { enabled: false },
       '@opentelemetry/instrumentation-net': { enabled: false },
-      '@opentelemetry/instrumentation-express': {
-        ignoreLayersType: [
-          ExpressLayerType.MIDDLEWARE,
-          ExpressLayerType.REQUEST_HANDLER,
-        ],
-      },
+      '@opentelemetry/instrumentation-express': { enabled: false },
       '@opentelemetry/instrumentation-nestjs-core': { enabled: false },
       '@opentelemetry/instrumentation-ioredis': { enabled: false },
       '@opentelemetry/instrumentation-redis': { enabled: false },

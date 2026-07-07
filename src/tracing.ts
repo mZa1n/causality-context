@@ -30,6 +30,13 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-http': {
         ignoreIncomingRequestHook: (req) =>
           (req.url ?? '').includes('/.well-known/'),
+        requestHook: (span, req) => {
+          if ('method' in req && 'url' in req) {
+            const method = req.method ?? 'HTTP';
+            const path = (req.url ?? '/').split('?')[0] || '/';
+            span.updateName(`${method} ${path}`);
+          }
+        },
       },
     }),
     new PrismaInstrumentation({

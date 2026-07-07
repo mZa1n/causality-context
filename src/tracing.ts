@@ -4,8 +4,8 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import {
-    LoggerProvider,
-    BatchLogRecordProcessor,
+  LoggerProvider,
+  BatchLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { logs } from '@opentelemetry/api-logs';
@@ -16,34 +16,48 @@ const serviceName = process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
 const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName });
 
 const sdk = new NodeSDK({
-    resource,
-    traceExporter: new OTLPTraceExporter(),
-    instrumentations: [
-        getNodeAutoInstrumentations({
-            '@opentelemetry/instrumentation-fs': { enabled: false },
-            '@opentelemetry/instrumentation-dns': { enabled: false },
-            '@opentelemetry/instrumentation-net': { enabled: false },
-            '@opentelemetry/instrumentation-express': {
-                ignoreLayersType: [ExpressLayerType.MIDDLEWARE, ExpressLayerType.REQUEST_HANDLER],
-            },
-            '@opentelemetry/instrumentation-http': {
-                ignoreIncomingRequestHook: (req) =>
-                    (req.url ?? '').includes('/.well-known/'),
-            },
-        }),
-        new PrismaInstrumentation(),
-    ],
+  resource,
+  traceExporter: new OTLPTraceExporter(),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-fs': { enabled: false },
+      '@opentelemetry/instrumentation-dns': { enabled: false },
+      '@opentelemetry/instrumentation-net': { enabled: false },
+      '@opentelemetry/instrumentation-express': {
+        ignoreLayersType: [
+          ExpressLayerType.MIDDLEWARE,
+          ExpressLayerType.REQUEST_HANDLER,
+        ],
+      },
+      '@opentelemetry/instrumentation-nestjs-core': { enabled: false },
+      '@opentelemetry/instrumentation-ioredis': { enabled: false },
+      '@opentelemetry/instrumentation-redis': { enabled: false },
+      '@opentelemetry/instrumentation-http': {
+        ignoreIncomingRequestHook: (req) =>
+          (req.url ?? '').includes('/.well-known/'),
+      },
+    }),
+    new PrismaInstrumentation({
+      ignoreSpanTypes: [
+        'prisma:engine:connection',
+        'prisma:engine:serialize',
+        'prisma:engine:response_json_serialize',
+      ],
+    }),
+  ],
 });
 sdk.start();
 
 const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
+  resource,
+  processors: [
+    new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
+  ],
 });
 logs.setGlobalLoggerProvider(loggerProvider);
 
 process.on('SIGTERM', () => {
-    Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
-        process.exit(0),
-    );
+  Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
+    process.exit(0),
+  );
 });

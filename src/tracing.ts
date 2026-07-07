@@ -10,7 +10,7 @@ import {
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { logs } from '@opentelemetry/api-logs';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
-import { ExpressLayerType } from '@opentelemetry/instrumentation-express';
+import { stopPyroscope } from './pyroscope.js';
 
 const serviceName = process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
 const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName });
@@ -60,7 +60,9 @@ const loggerProvider = new LoggerProvider({
 logs.setGlobalLoggerProvider(loggerProvider);
 
 process.on('SIGTERM', () => {
-  Promise.allSettled([sdk.shutdown(), loggerProvider.shutdown()]).finally(() =>
-    process.exit(0),
-  );
+  Promise.allSettled([
+    sdk.shutdown(),
+    loggerProvider.shutdown(),
+    stopPyroscope(),
+  ]).finally(() => process.exit(0));
 });

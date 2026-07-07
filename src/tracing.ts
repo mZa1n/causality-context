@@ -11,9 +11,16 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { logs } from '@opentelemetry/api-logs';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 import { stopPyroscope } from './pyroscope.js';
+import { SDK_INFO } from '@opentelemetry/core';
 
 const serviceName = process.env.OTEL_SERVICE_NAME ?? 'unknown-service';
-const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName });
+
+const resource = resourceFromAttributes({
+  [ATTR_SERVICE_NAME]: serviceName,
+  'telemetry.sdk.language': SDK_INFO['telemetry.sdk.language'],
+  'telemetry.sdk.name': SDK_INFO['telemetry.sdk.name'],
+  'telemetry.sdk.version': SDK_INFO['telemetry.sdk.version'],
+});
 
 const sdk = new NodeSDK({
   resource,

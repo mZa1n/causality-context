@@ -66,7 +66,6 @@ export class CausalityLogger implements LoggerService {
 
     const record: Record<string, unknown> = {
       ...payloadAttributes,
-      ...traceFields(),
       timestamp: new Date().toISOString().replace('Z', '000Z'),
       ...(exception ? { exception } : {}),
     };

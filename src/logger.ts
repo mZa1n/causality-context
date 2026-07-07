@@ -62,10 +62,10 @@ export class CausalityLogger implements LoggerService {
         : { event: String(message) };
 
     const event = String(payload.event ?? 'log');
+    const { event: _event, ...payloadAttributes } = payload;
 
     const record: Record<string, unknown> = {
-      ...payload,
-      level: LEVEL_TEXT[level],
+      ...payloadAttributes,
       ...traceFields(),
       timestamp: new Date().toISOString().replace('Z', '000Z'),
       ...(exception ? { exception } : {}),

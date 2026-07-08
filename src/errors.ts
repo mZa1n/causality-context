@@ -1,3 +1,5 @@
+import { trace } from '@opentelemetry/api';
+
 export type ErrorSeverity = 'critical' | 'error' | 'warning' | 'info';
 
 export interface ErrorEventPayload {
@@ -9,6 +11,7 @@ export interface ErrorEventPayload {
   stacktrace?: string;
   userId?: string;
   sid?: string;
+  traceId?: string;
   tags?: Record<string, string>;
   occurredAt: string;
 }
@@ -53,6 +56,13 @@ export function configureErrorPublisher(cfg: Partial<PublisherConfig>): void {
   Object.assign(config, cfg);
 }
 
+function currentTraceId(): string | undefined {
+  const span = trace.getActiveSpan();
+  const id = span?.spanContext().traceId;
+  if (!id || /^0+$/.test(id)) return undefined;
+  return id;
+}
+
 function extractError(error: unknown): {
   message: string;
   stacktrace?: string;
@@ -81,6 +91,7 @@ export function publishError(
   const service = input.service ?? config.service;
   const fromError =
     input.error !== undefined ? extractError(input.error) : undefined;
+  const traceId = currentTraceId();
   const payload: ErrorEventPayload = {
     source: 'error',
     severity: input.severity,
@@ -88,6 +99,7 @@ export function publishError(
     title: input.title,
     message: input.message ?? fromError?.message ?? '',
     ...(fromError?.stacktrace ? { stacktrace: fromError.stacktrace } : {}),
+    ...(traceId ? { traceId } : {}),
     ...(input.tags ? { tags: input.tags } : {}),
     occurredAt: new Date().toISOString(),
   };
@@ -96,6 +108,7 @@ export function publishError(
 }
 
 export function publishBug(nats: NatsPublisher, input: PublishBugInput): void {
+  const traceId = currentTraceId();
   const payload: ErrorEventPayload = {
     source: 'bug',
     severity: input.severity ?? 'info',
@@ -104,6 +117,7 @@ export function publishBug(nats: NatsPublisher, input: PublishBugInput): void {
     message: input.message,
     ...(input.userId ? { userId: input.userId } : {}),
     ...(input.sid ? { sid: input.sid } : {}),
+    ...(traceId ? { traceId } : {}),
     ...(input.tags ? { tags: input.tags } : {}),
     occurredAt: new Date().toISOString(),
   };

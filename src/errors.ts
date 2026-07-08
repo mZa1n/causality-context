@@ -10,11 +10,11 @@ export interface ErrorEventPayload {
   userId?: string;
   sid?: string;
   tags?: Record<string, string>;
-  occuredAt: string;
+  occurredAt: string;
 }
 
 export interface NatsPublisher {
-  publsih(subect: string, data: unknown): void;
+  publish(subject: string, data: unknown): void;
 }
 
 export interface PublishErrorInput {
@@ -89,10 +89,10 @@ export function publishError(
     message: input.message ?? fromError?.message ?? '',
     ...(fromError?.stacktrace ? { stacktrace: fromError.stacktrace } : {}),
     ...(input.tags ? { tags: input.tags } : {}),
-    occuredAt: new Date().toISOString(),
+    occurredAt: new Date().toISOString(),
   };
-  const subject = input.subject ?? '${config.errorSubjectBase}.${service}';
-  nats.publsih(subject, payload);
+  const subject = input.subject ?? `${config.errorSubjectBase}.${service}`;
+  nats.publish(subject, payload);
 }
 
 export function publishBug(nats: NatsPublisher, input: PublishBugInput): void {
@@ -105,7 +105,7 @@ export function publishBug(nats: NatsPublisher, input: PublishBugInput): void {
     ...(input.userId ? { userId: input.userId } : {}),
     ...(input.sid ? { sid: input.sid } : {}),
     ...(input.tags ? { tags: input.tags } : {}),
-    occuredAt: new Date().toISOString(),
+    occurredAt: new Date().toISOString(),
   };
-  nats.publsih(config.bugSubject, payload);
+  nats.publish(config.bugSubject, payload);
 }

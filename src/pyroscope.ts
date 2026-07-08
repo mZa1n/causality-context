@@ -63,17 +63,7 @@ export function startPyroscopeFromEnv(): void {
     authToken: optional(process.env.PYROSCOPE_AUTH_TOKEN),
     tenantID: optional(process.env.PYROSCOPE_TENANT_ID),
     tags: tagsFromEnv(),
-    wall: {
-      collectCpuTime: boolEnv('PYROSCOPE_WALL_COLLECT_CPU_TIME', true),
-      samplingDurationMs: numberEnv('PYROSCOPE_WALL_SAMPLING_DURATION_MS'),
-      samplingIntervalMicros: numberEnv('PYROSCOPE_WALL_SAMPLING_INTERVAL_MS'),
-    },
-    heap: {
-      samplingIntervalBytes: numberEnv(
-        'PYROSCOPE_HEAP_SAMPLING_INTERVAL_BYTES',
-      ),
-      stackDepth: numberEnv('PYROSCOPE_HEAP_STACK_DEPTH'),
-    },
+    wall: { collectCpuTime: true },
   };
   try {
     pyroscope = require('@pyroscope/nodejs') as PyroscopeModule;

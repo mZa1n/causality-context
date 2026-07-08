@@ -33,8 +33,6 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-net': { enabled: false },
       '@opentelemetry/instrumentation-express': { enabled: false },
       '@opentelemetry/instrumentation-nestjs-core': { enabled: false },
-      '@opentelemetry/instrumentation-ioredis': { enabled: false },
-      '@opentelemetry/instrumentation-redis': { enabled: false },
       '@opentelemetry/instrumentation-http': {
         ignoreIncomingRequestHook: (req) =>
           (req.url ?? '').includes('/.well-known/'),

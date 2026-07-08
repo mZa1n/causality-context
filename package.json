@@ -1,6 +1,6 @@
 {
   "name": "@mza1n/causality-context",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "Causality context (correlation/causation/execution) propagation for HTTP, WebSocket, NATS and Redis pub/sub",
   "type": "module",
   "exports": {
